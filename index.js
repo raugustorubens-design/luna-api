@@ -5,6 +5,7 @@ import express from "express";
 import pkg from "pg";
 import cors from "cors";
 import axios from "axios";
+import { createGuardianRouter } from "./src/guardian/routes.js";
 
 const { Pool } = pkg;
 
@@ -15,21 +16,13 @@ const { Pool } = pkg;
 const app = express();
 
 // ==========================
-// BANCO (DEBUG)
-// ==========================
-
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
-
-// ==========================
 // BANCO (CONFIG MANUAL - BLINDADO)
 // ==========================
+// (Bloco de debug duplicado — mesma configuração declarada duas vezes,
+// `const pool` repetido — removido aqui. Era um `SyntaxError` real
+// ("Identifier 'pool' has already been declared"), então o arquivo como
+// estava commitado não conseguia nem carregar; isto é uma correção de bug,
+// não uma mudança de comportamento.)
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -212,6 +205,17 @@ ${memorias.map(m => `- (${m.tipo}) ${m.conteudo}`).join("\n") || "Nenhuma"}
     });
   }
 });
+
+// ==========================
+// GUARDIAN (MVP-01)
+// ==========================
+// Contrato HTTP público do Guardian — save/update/delete/get/search +
+// auditoria. Não conhece `memoria_eventos`/`pool` acima; fala com o
+// armazenamento só através do seu próprio SupabaseAdapter (ver
+// src/guardian/). Preparado para consumo futuro (ex.: Memory Engine do
+// monorepo `luna`, hoje ainda local) — não significa que já está em uso em
+// produção nesta etapa.
+app.use(createGuardianRouter());
 
 // ==========================
 // START
