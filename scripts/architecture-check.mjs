@@ -67,4 +67,15 @@ for (const legacyRoute of ['app.get("/"', 'app.get("/api/github/file"', 'app.pos
 const poolDeclarations = indexSource.match(/const pool = new Pool/g) ?? [];
 assert.equal(poolDeclarations.length, 1, "index.js must declare `pool` exactly once (regression guard for the duplicate-declaration bug)");
 
+// ---- hipocampo-temp/ (EXTRACT/FILTER/CLASSIFY, Memory Index) must only talk
+// to storage through the Guardian's own contract, never a driver directly ----
+const hipocampoTempFiles = guardianFiles.filter((path) => path.includes("hipocampo-temp/") && !path.endsWith("routes.js"));
+for (const path of hipocampoTempFiles) {
+  assert.doesNotMatch(
+    read(path),
+    /from ["'][^"']*adapters\/supabase-adapter[^"']*["']/,
+    `${path} must depend only on the Guardian's contract (save/search/update), never the storage adapter directly`,
+  );
+}
+
 console.log(`Guardian architecture checks passed (${guardianFiles.length} files scanned).`);

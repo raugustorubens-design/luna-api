@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test src/guardian/__tests__/*.test.js",
+    "test": "node --test src/guardian/__tests__/*.test.js src/guardian/hipocampo-temp/__tests__/*.test.js",
     "test:architecture": "node scripts/architecture-check.mjs"
   },
   "dependencies": {

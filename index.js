@@ -5,7 +5,9 @@ import express from "express";
 import pkg from "pg";
 import cors from "cors";
 import axios from "axios";
+import { createGuardian } from "./src/guardian/guardian.js";
 import { createGuardianRouter } from "./src/guardian/routes.js";
+import { createMemoryRouter } from "./src/guardian/hipocampo-temp/routes.js";
 
 const { Pool } = pkg;
 
@@ -207,15 +209,18 @@ ${memorias.map(m => `- (${m.tipo}) ${m.conteudo}`).join("\n") || "Nenhuma"}
 });
 
 // ==========================
-// GUARDIAN (MVP-01)
+// GUARDIAN (MVP-01 + Arquitetura da Memória)
 // ==========================
-// Contrato HTTP público do Guardian — save/update/delete/get/search +
-// auditoria. Não conhece `memoria_eventos`/`pool` acima; fala com o
-// armazenamento só através do seu próprio SupabaseAdapter (ver
-// src/guardian/). Preparado para consumo futuro (ex.: Memory Engine do
-// monorepo `luna`, hoje ainda local) — não significa que já está em uso em
-// produção nesta etapa.
-app.use(createGuardianRouter());
+// Uma única instância do Guardian, compartilhada entre o contrato genérico
+// de armazenamento (save/update/delete/get/search + auditoria) e o pipeline
+// de memória (EXTRACT→FILTER→CLASSIFY→VALIDATE→PERSIST + Memory Index) —
+// para que ambos falem com o mesmo adapter e a mesma trilha de auditoria.
+// Nenhum dos dois conhece `memoria_eventos`/`pool` acima. Preparado para
+// consumo futuro (Gateway do `luna-core`, Memory Engine do monorepo `luna`)
+// — não significa que já está em uso em produção nesta etapa.
+const guardian = createGuardian();
+app.use(createGuardianRouter(guardian));
+app.use(createMemoryRouter(guardian));
 
 // ==========================
 // START
