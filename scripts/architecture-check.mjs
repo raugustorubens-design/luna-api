@@ -57,15 +57,27 @@ assert.doesNotMatch(
   "Guardian must stay collection-agnostic — table names are the caller's business, not Guardian's",
 );
 
-// ---- The legacy routes (/, /api/github/file, /chat) must stay intact ----
+// ---- The root route must stay intact ----
 const indexSource = read("index.js");
-for (const legacyRoute of ['app.get("/"', 'app.get("/api/github/file"', 'app.post("/chat"']) {
-  assert.match(indexSource, new RegExp(legacyRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `Legacy route must be preserved: ${legacyRoute}`);
-}
+assert.match(indexSource, /app\.get\("\/"/, 'Legacy route must be preserved: app.get("/"');
 
-// ---- index.js must not have the duplicate `const pool` bug again ----
-const poolDeclarations = indexSource.match(/const pool = new Pool/g) ?? [];
-assert.equal(poolDeclarations.length, 1, "index.js must declare `pool` exactly once (regression guard for the duplicate-declaration bug)");
+// ---- ADR-012: /chat, /api/github/file e o pool `pg` cru foram
+// descontinuados — o Guardian oficial (rotas /guardian/*) é o único papel
+// deste serviço agora; o backend único de chat/contexto passou a ser
+// luna-core (ADR-012 Decisão 1). Regression guard na direção oposta do que
+// havia antes: essas rotas/dependência não devem voltar a aparecer aqui.
+for (const removedRoute of ['app.get("/api/github/file"', 'app.post("/chat"']) {
+  assert.doesNotMatch(
+    indexSource,
+    new RegExp(removedRoute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `Rota legada descontinuada (ADR-012) não deve reaparecer: ${removedRoute}`,
+  );
+}
+assert.doesNotMatch(
+  indexSource,
+  /\bnew Pool\(|from ["']pg["']/,
+  "index.js não deve voltar a depender de `pg`/Pool diretamente (ADR-012 — descontinuado junto com /chat)",
+);
 
 // ---- hipocampo-temp/ (EXTRACT/FILTER/CLASSIFY, Memory Index) must only talk
 // to storage through the Guardian's own contract, never a driver directly ----

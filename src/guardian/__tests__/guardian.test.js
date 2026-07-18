@@ -30,6 +30,11 @@ function stubAdapter(overrides = {}) {
       calls.push(["search", input]);
       return overrides.searchResult ?? [];
     },
+    count: async (input) => {
+      calls.push(["count", input]);
+      if (overrides.countError) throw overrides.countError;
+      return overrides.countResult ?? 0;
+    },
   };
 }
 
@@ -53,8 +58,8 @@ test("guardian.save delegates to the adapter and records a success audit entry",
   assert.match(sink.entries[0].at, /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test("guardian.get/search/update/delete all delegate and audit under the right operation name", async () => {
-  const adapter = stubAdapter({ searchResult: [{ id: "2" }] });
+test("guardian.get/search/update/delete/count all delegate and audit under the right operation name", async () => {
+  const adapter = stubAdapter({ searchResult: [{ id: "2" }], countResult: 3 });
   const sink = new InMemoryAuditSink();
   const guardian = createGuardian(adapter, new GuardianAuditor(sink));
 
@@ -62,10 +67,12 @@ test("guardian.get/search/update/delete all delegate and audit under the right o
   await guardian.search({ collection: "memoria_luna", filter: { tipo: "checkpoint" } }, "context-hub");
   await guardian.update({ collection: "memoria_luna", id: "1", data: { titulo: "novo" } }, "memory-engine");
   await guardian.delete({ collection: "memoria_luna", id: "1" }, "memory-engine");
+  const count = await guardian.count({ collection: "memoria_luna" }, "luna-core.chat");
 
+  assert.equal(count, 3);
   assert.deepEqual(
     sink.entries.map((e) => e.operation),
-    ["get", "search", "update", "delete"],
+    ["get", "search", "update", "delete", "count"],
   );
   assert.ok(sink.entries.every((e) => e.success));
 });

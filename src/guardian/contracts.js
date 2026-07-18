@@ -37,9 +37,13 @@
  * @property {string} [orderBy]
  * @property {boolean} [ascending]
  *
+ * @typedef {Object} CountInput
+ * @property {string} collection
+ * @property {Record<string, unknown>} [filter] - igualdade simples por coluna, mesma forma de SearchInput
+ *
  * @typedef {Object} AuditEntry
  * @property {string} origin - quem chamou (ex.: "memory-engine", "guardian-http")
- * @property {"save"|"update"|"delete"|"get"|"search"} operation
+ * @property {"save"|"update"|"delete"|"get"|"search"|"count"} operation
  * @property {string} at - ISO timestamp
  * @property {string} destination - coleção/tabela afetada
  * @property {boolean} success
@@ -51,6 +55,7 @@
  * @property {(input: DeleteInput, origin: string) => Promise<boolean>} delete
  * @property {(input: GetInput, origin: string) => Promise<StorageRecord | null>} get
  * @property {(input: SearchInput, origin: string) => Promise<StorageRecord[]>} search
+ * @property {(input: CountInput, origin: string) => Promise<number>} count - ADR-012: contagem eficiente (SELECT count(*), não fetch-all), extensão pontual para /stats de chat em luna-core
  */
 
 // Este arquivo existe só para documentar o contrato via JSDoc (o repositório

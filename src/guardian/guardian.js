@@ -40,6 +40,9 @@ export function createGuardian(adapter = createSupabaseAdapter(), auditor = new 
     /** @param {import('./contracts.js').SearchInput} input @param {string} origin */
     search: (input, origin) => run("search", input.collection, origin, () => adapter.search(input)),
 
+    /** @param {import('./contracts.js').CountInput} input @param {string} origin */
+    count: (input, origin) => run("count", input.collection, origin, () => adapter.count(input)),
+
     /** Auditoria recente — só leitura, para diagnóstico. */
     recentAudit: (limit) => auditor.sink.recent(limit),
   };

@@ -38,8 +38,11 @@ function fakeSupabaseClient(overrides = {}) {
           calls.push(["delete"]);
           return { eq: (col, val) => Promise.resolve(overrides.deleteResult ?? { error: null }) };
         },
-        select(columns) {
-          calls.push(["select", columns]);
+        select(columns, options) {
+          calls.push(["select", columns, options]);
+          if (options?.count === "exact" && options?.head) {
+            return terminal(overrides.countResult ?? { count: 0, error: null });
+          }
           return terminal(overrides.selectResult ?? { data: [], error: null });
         },
       };
@@ -89,4 +92,34 @@ test("supabase adapter delete succeeds and returns true", async () => {
   const result = await adapter.delete({ collection: "memoria_luna", id: "1" });
 
   assert.equal(result, true);
+});
+
+test("supabase adapter count uses a real count query (exact, head: true), not fetch-all", async () => {
+  const client = fakeSupabaseClient({ countResult: { count: 7, error: null } });
+  const adapter = createSupabaseAdapter(client);
+
+  const count = await adapter.count({ collection: "messages" });
+
+  assert.equal(count, 7);
+  assert.deepEqual(client.calls[0], ["from", "messages"]);
+  assert.deepEqual(client.calls[1], ["select", "*", { count: "exact", head: true }]);
+});
+
+test("supabase adapter count applies equality filters before counting", async () => {
+  const client = fakeSupabaseClient({ countResult: { count: 2, error: null } });
+  const adapter = createSupabaseAdapter(client);
+
+  await adapter.count({ collection: "messages", filter: { conversation_id: "abc" } });
+
+  assert.deepEqual(
+    client.calls.filter((c) => c[0] === "eq"),
+    [["eq", "conversation_id", "abc"]],
+  );
+});
+
+test("supabase adapter count throws on error instead of swallowing it", async () => {
+  const client = fakeSupabaseClient({ countResult: { count: null, error: { message: "count failed" } } });
+  const adapter = createSupabaseAdapter(client);
+
+  await assert.rejects(() => adapter.count({ collection: "messages" }), /count failed/);
 });

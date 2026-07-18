@@ -58,6 +58,22 @@ export function createSupabaseAdapter(client) {
       if (error) throw new Error(error.message ?? "Guardian search failed");
       return rows ?? [];
     },
+
+    /**
+     * ADR-012: contagem via `count: "exact", head: true` do Supabase — não
+     * traz nenhuma linha, só o total, ao contrário de `search` + `.length`.
+     * @param {import('../contracts.js').CountInput} input
+     */
+    async count({ collection, filter }) {
+      let query = supabase.from(collection).select("*", { count: "exact", head: true });
+      for (const [column, value] of Object.entries(filter ?? {})) {
+        query = query.eq(column, value);
+      }
+
+      const { count, error } = await query;
+      if (error) throw new Error(error.message ?? "Guardian count failed");
+      return count ?? 0;
+    },
   };
 }
 

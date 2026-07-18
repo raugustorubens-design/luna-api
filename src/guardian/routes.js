@@ -62,6 +62,15 @@ export function createGuardianRouter(guardian = createGuardian()) {
     }
   });
 
+  router.post("/guardian/count", async (req, res) => {
+    try {
+      const count = await guardian.count(req.body, origin(req));
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Guardian count failed" });
+    }
+  });
+
   router.get("/guardian/audit", (req, res) => {
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     res.json({ entries: guardian.recentAudit(limit) });
