@@ -7,11 +7,13 @@
  * como o pipeline de escrita, só depende do contrato do Guardian
  * (`guardian.search`), nunca de um adapter de armazenamento diretamente.
  *
- * MVP: sem busca semântica/vetorial (fora de escopo). Filtragem por `tipo`/
- * `estado` ocorre no armazenamento (contrato de igualdade simples do
- * Guardian); filtragem por palavra-chave (`q`) ocorre em memória, após a
- * busca. Trocar por busca vetorial/semântica no futuro não deve exigir
- * mudar o formato desta resposta (Impressão Cognitiva Inicial).
+ * MVP: sem busca semântica/vetorial (fora de escopo). Filtragem por `tipo`
+ * ocorre no armazenamento (`tipo` é coluna real de `memoria_luna`);
+ * `estado`/`camada`/`resumo`/`chave` vivem dentro do `conteudo` (jsonb, ver
+ * `memory-pipeline.js`) — não são coluna própria, então filtragem por
+ * `estado` e por palavra-chave (`q`) ocorrem em memória, após a busca.
+ * Trocar por busca vetorial/semântica no futuro não deve exigir mudar o
+ * formato desta resposta (Impressão Cognitiva Inicial).
  */
 import { classifyTipo } from "./classify.js";
 import { MEMORY_COLLECTION } from "./memory-pipeline.js";
@@ -20,11 +22,13 @@ const FETCH_BATCH = 100;
 const RESUMO_MAX_LENGTH = 160;
 
 function summarize(record) {
-  if (record.resumo) return String(record.resumo);
-  if (typeof record.conteudo === "string") {
-    return record.conteudo.length > RESUMO_MAX_LENGTH ? `${record.conteudo.slice(0, RESUMO_MAX_LENGTH)}…` : record.conteudo;
+  const resumo = record.conteudo?.resumo;
+  if (resumo) return String(resumo);
+  const valor = record.conteudo?.valor;
+  if (typeof valor === "string") {
+    return valor.length > RESUMO_MAX_LENGTH ? `${valor.slice(0, RESUMO_MAX_LENGTH)}…` : valor;
   }
-  const serialized = JSON.stringify(record.conteudo ?? {});
+  const serialized = JSON.stringify(valor ?? {});
   return serialized.length > RESUMO_MAX_LENGTH ? `${serialized.slice(0, RESUMO_MAX_LENGTH)}…` : serialized;
 }
 
@@ -34,16 +38,16 @@ export function buildImpressaoCognitiva(record) {
     id: record.id,
     tipo: record.tipo,
     resumo: summarize(record),
-    camada: record.camada,
-    estado: record.estado,
-    criadoEm: record.criadoEm,
+    camada: record.conteudo?.camada,
+    estado: record.conteudo?.estado,
+    criadoEm: record.criado_em,
     ref: { collection: MEMORY_COLLECTION, id: record.id },
   };
 }
 
 function matchesKeyword(record, q) {
   const needle = q.toLowerCase();
-  return summarize(record).toLowerCase().includes(needle) || (record.chave ?? "").toLowerCase().includes(needle);
+  return summarize(record).toLowerCase().includes(needle) || (record.conteudo?.chave ?? "").toLowerCase().includes(needle);
 }
 
 /**
@@ -56,14 +60,14 @@ export async function searchMemoryIndex(guardian, criteria = {}, origin) {
 
   const filter = {};
   if (tipo) filter.tipo = classifyTipo(tipo);
-  if (!incluirNaoAtivas) filter.estado = "ativa";
 
   const records = await guardian.search(
-    { collection: MEMORY_COLLECTION, filter, limit: FETCH_BATCH, orderBy: "criadoEm", ascending: false },
+    { collection: MEMORY_COLLECTION, filter, limit: FETCH_BATCH, orderBy: "criado_em", ascending: false },
     origin,
   );
 
-  const filtered = q ? records.filter((record) => matchesKeyword(record, q)) : records;
+  const ativas = incluirNaoAtivas ? records : records.filter((record) => record.conteudo?.estado === "ativa");
+  const filtered = q ? ativas.filter((record) => matchesKeyword(record, q)) : ativas;
 
   return filtered.slice(0, limit).map(buildImpressaoCognitiva);
 }

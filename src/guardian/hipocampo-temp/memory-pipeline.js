@@ -28,6 +28,24 @@ import { MemoryDecisionAuditor } from "./memory-audit.js";
 
 export const MEMORY_COLLECTION = "memoria_luna";
 
+// A tabela real `memoria_luna` (Supabase, conferida via information_schema)
+// só tem `id, tipo, contexto, conteudo, criado_em, titulo, empresa_id,
+// embedding` — mesmas colunas que `luna-core/src/luna/memory-engine.ts`
+// (`persistMemory()`) já usa com sucesso em produção. `camada`/`estado`/
+// `resumo`/`chave`/`signals`/`score` nunca existiram como coluna própria;
+// continuam calculados e usados aqui para a decisão de persistir/descartar/
+// substituir, mas agora guardados dentro do `conteudo` (jsonb, aceita
+// estrutura livre) em vez de colunas inexistentes — é o que causava o 400
+// em toda escrita/busca antes desta correção.
+//
+// Consequência: o contrato genérico do Guardian (`search`) só sabe filtrar
+// por igualdade de coluna real (`supabase-adapter.js`, `.eq(column, value)`)
+// — não filtra dentro de um campo jsonb. A Replacement Policy (dedup por
+// `chave`) busca por um lote recente e filtra client-side, mesmo padrão já
+// usado por `memory-engine.ts` (`retrieveMemory`, pool de candidatos +
+// ranking em memória) e pela própria Memory Index (filtro de palavra-chave).
+const DEDUP_CANDIDATE_POOL_LIMIT = 200;
+
 class MemoryValidationError extends Error {
   constructor(message) {
     super(message);
@@ -42,11 +60,12 @@ class MemoryValidationError extends Error {
 export function createMemoryPipeline(guardian, decisionAuditor = new MemoryDecisionAuditor()) {
   /**
    * @param {{ tipo: string, conteudo: unknown, resumo?: string, chave?: string,
+   *   contexto?: string, titulo?: string, empresa_id?: number,
    *   signals?: { relevance?: number, impact?: number, entropy?: number } }} input
    * @param {string} origin
    */
   async function write(input, origin) {
-    const { tipo, conteudo, resumo, chave } = input ?? {};
+    const { tipo, conteudo, resumo, chave, contexto, titulo, empresa_id } = input ?? {};
     const signals = extractSignals(input?.signals);
     const score = computeScore(signals);
 
@@ -73,10 +92,16 @@ export function createMemoryPipeline(guardian, decisionAuditor = new MemoryDecis
     // do chamador — não há busca semântica nesta versão (fora de escopo).
     let substituiu = null;
     if (chave) {
-      const existentes = await guardian.search({ collection: MEMORY_COLLECTION, filter: { chave, estado: "ativa" }, limit: 1 }, origin);
-      const existente = existentes[0];
+      const candidatos = await guardian.search(
+        { collection: MEMORY_COLLECTION, limit: DEDUP_CANDIDATE_POOL_LIMIT, orderBy: "criado_em", ascending: false },
+        origin,
+      );
+      const existente = candidatos.find((r) => r.conteudo?.chave === chave && r.conteudo?.estado === "ativa");
       if (existente) {
-        await guardian.update({ collection: MEMORY_COLLECTION, id: existente.id, data: { estado: "substituida" } }, origin);
+        await guardian.update(
+          { collection: MEMORY_COLLECTION, id: existente.id, data: { conteudo: { ...existente.conteudo, estado: "substituida" } } },
+          origin,
+        );
         substituiu = existente.id;
       }
     }
@@ -86,14 +111,18 @@ export function createMemoryPipeline(guardian, decisionAuditor = new MemoryDecis
         collection: MEMORY_COLLECTION,
         data: {
           tipo: tipoValidado,
-          camada: CAMADA_INICIAL,
-          estado: "ativa",
-          conteudo,
-          resumo,
-          chave,
-          signals,
-          score,
-          criadoEm: new Date().toISOString(),
+          contexto,
+          titulo,
+          empresa_id,
+          conteudo: {
+            valor: conteudo,
+            camada: CAMADA_INICIAL,
+            estado: "ativa",
+            resumo,
+            chave,
+            signals,
+            score,
+          },
         },
       },
       origin,
