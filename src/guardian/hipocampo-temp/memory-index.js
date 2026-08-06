@@ -19,31 +19,38 @@ import { MEMORY_COLLECTION } from "./memory-pipeline.js";
 const FETCH_BATCH = 100;
 const RESUMO_MAX_LENGTH = 160;
 
+// `camada`/`estado`/`resumo`/`chave` are not real `memoria_luna` columns —
+// they live inside `conteudo` (jsonb), same convention `memory-pipeline.js`
+// writes them with. See the comment at the top of that file.
 function summarize(record) {
-  if (record.resumo) return String(record.resumo);
-  if (typeof record.conteudo === "string") {
-    return record.conteudo.length > RESUMO_MAX_LENGTH ? `${record.conteudo.slice(0, RESUMO_MAX_LENGTH)}…` : record.conteudo;
+  const conteudo = record.conteudo ?? {};
+  if (conteudo.resumo) return String(conteudo.resumo);
+  const original = conteudo.original;
+  if (typeof original === "string") {
+    return original.length > RESUMO_MAX_LENGTH ? `${original.slice(0, RESUMO_MAX_LENGTH)}…` : original;
   }
-  const serialized = JSON.stringify(record.conteudo ?? {});
+  const serialized = JSON.stringify(original ?? {});
   return serialized.length > RESUMO_MAX_LENGTH ? `${serialized.slice(0, RESUMO_MAX_LENGTH)}…` : serialized;
 }
 
 /** Impressão Cognitiva Inicial — nunca inclui o `conteudo` completo. */
 export function buildImpressaoCognitiva(record) {
+  const conteudo = record.conteudo ?? {};
   return {
     id: record.id,
     tipo: record.tipo,
     resumo: summarize(record),
-    camada: record.camada,
-    estado: record.estado,
-    criadoEm: record.criadoEm,
+    camada: conteudo.camada,
+    estado: conteudo.estado,
+    criadoEm: record.criado_em,
     ref: { collection: MEMORY_COLLECTION, id: record.id },
   };
 }
 
 function matchesKeyword(record, q) {
   const needle = q.toLowerCase();
-  return summarize(record).toLowerCase().includes(needle) || (record.chave ?? "").toLowerCase().includes(needle);
+  const chave = record.conteudo?.chave ?? "";
+  return summarize(record).toLowerCase().includes(needle) || chave.toLowerCase().includes(needle);
 }
 
 /**
@@ -56,14 +63,16 @@ export async function searchMemoryIndex(guardian, criteria = {}, origin) {
 
   const filter = {};
   if (tipo) filter.tipo = classifyTipo(tipo);
-  if (!incluirNaoAtivas) filter.estado = "ativa";
 
   const records = await guardian.search(
-    { collection: MEMORY_COLLECTION, filter, limit: FETCH_BATCH, orderBy: "criadoEm", ascending: false },
+    { collection: MEMORY_COLLECTION, filter, limit: FETCH_BATCH, orderBy: "criado_em", ascending: false },
     origin,
   );
 
-  const filtered = q ? records.filter((record) => matchesKeyword(record, q)) : records;
+  // `estado` isn't a real column (see summarize() comment above) — filtered
+  // client-side after fetch, same as the keyword filter below.
+  const ativas = incluirNaoAtivas ? records : records.filter((record) => record.conteudo?.estado === "ativa");
+  const filtered = q ? ativas.filter((record) => matchesKeyword(record, q)) : ativas;
 
   return filtered.slice(0, limit).map(buildImpressaoCognitiva);
 }
