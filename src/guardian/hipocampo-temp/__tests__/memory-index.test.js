@@ -17,11 +17,13 @@ function stubGuardian(records) {
 const fullRecord = {
   id: "1",
   tipo: "arquitetural",
-  camada: 1,
-  estado: "ativa",
-  conteudo: "Este é um registro completo com informação sensível de detalhe interno que não deve vazar.",
-  criadoEm: "2026-07-12T00:00:00.000Z",
-  chave: "adr-002",
+  criado_em: "2026-07-12T00:00:00.000Z",
+  conteudo: {
+    camada: 1,
+    estado: "ativa",
+    original: "Este é um registro completo com informação sensível de detalhe interno que não deve vazar.",
+    chave: "adr-002",
+  },
 };
 
 test("buildImpressaoCognitiva never leaks the full conteudo field", () => {
@@ -37,15 +39,25 @@ test("buildImpressaoCognitiva never leaks the full conteudo field", () => {
 });
 
 test("buildImpressaoCognitiva prefers an explicit resumo field over truncating conteudo", () => {
-  const impressao = buildImpressaoCognitiva({ ...fullRecord, resumo: "ADR-002 aceito" });
+  const impressao = buildImpressaoCognitiva({ ...fullRecord, conteudo: { ...fullRecord.conteudo, resumo: "ADR-002 aceito" } });
   assert.equal(impressao.resumo, "ADR-002 aceito");
 });
 
-test("searchMemoryIndex defaults to only active memories unless incluirNaoAtivas is set", async () => {
-  const guardian = stubGuardian([fullRecord]);
-  await searchMemoryIndex(guardian, {}, "test");
+test("buildImpressaoCognitiva reads criado_em (snake_case), not criadoEm", () => {
+  const impressao = buildImpressaoCognitiva(fullRecord);
+  assert.equal(impressao.criadoEm, "2026-07-12T00:00:00.000Z");
+});
 
-  assert.equal(guardian.calls[0].filter.estado, "ativa");
+test("searchMemoryIndex orders by criado_em (snake_case) and defaults to only active memories unless incluirNaoAtivas is set", async () => {
+  const inactiveRecord = { ...fullRecord, id: "2", conteudo: { ...fullRecord.conteudo, estado: "substituida" } };
+  const guardian = stubGuardian([fullRecord, inactiveRecord]);
+
+  const ativasOnly = await searchMemoryIndex(guardian, {}, "test");
+  assert.equal(guardian.calls[0].orderBy, "criado_em");
+  assert.deepEqual(ativasOnly.map((r) => r.id), ["1"]);
+
+  const todas = await searchMemoryIndex(guardian, { incluirNaoAtivas: true }, "test");
+  assert.deepEqual(todas.map((r) => r.id).sort(), ["1", "2"]);
 });
 
 test("searchMemoryIndex filters by tipo and validates it against the known Tipo enum", async () => {
@@ -58,9 +70,9 @@ test("searchMemoryIndex filters by tipo and validates it against the known Tipo 
 
 test("searchMemoryIndex applies keyword filtering client-side and respects limit", async () => {
   const records = [
-    { ...fullRecord, id: "1", resumo: "prefere dark mode" },
-    { ...fullRecord, id: "2", resumo: "prefere light mode" },
-    { ...fullRecord, id: "3", resumo: "gosta de café" },
+    { ...fullRecord, id: "1", conteudo: { ...fullRecord.conteudo, resumo: "prefere dark mode" } },
+    { ...fullRecord, id: "2", conteudo: { ...fullRecord.conteudo, resumo: "prefere light mode" } },
+    { ...fullRecord, id: "3", conteudo: { ...fullRecord.conteudo, resumo: "gosta de café" } },
   ];
   const guardian = stubGuardian(records);
 

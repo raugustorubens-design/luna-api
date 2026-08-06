@@ -56,22 +56,29 @@ test("rejects a candidate without conteudo", async () => {
   await assert.rejects(() => pipeline.write({ tipo: "episodica", signals: highSignals }, "test"), /conteudo é obrigatório/);
 });
 
-test("persists a high-signal candidate in Camada 1, Estado ativa", async () => {
+test("persists a high-signal candidate in Camada 1, Estado ativa, using only real memoria_luna columns", async () => {
   const guardian = stubGuardian();
   const pipeline = createMemoryPipeline(guardian);
 
-  const result = await pipeline.write({ tipo: "preferencia", conteudo: "usa dark mode", signals: highSignals }, "forge");
+  const result = await pipeline.write(
+    { tipo: "preferencia", conteudo: "usa dark mode", contexto: "chat", titulo: "Preferência de tema", empresa_id: 1, signals: highSignals },
+    "forge",
+  );
 
   assert.equal(result.status, "persistido");
-  assert.equal(result.record.camada, 1);
-  assert.equal(result.record.estado, "ativa");
+  assert.equal(result.record.conteudo.camada, 1);
+  assert.equal(result.record.conteudo.estado, "ativa");
   assert.equal(result.record.tipo, "preferencia");
   assert.equal(guardian.calls[0][0], "save");
   assert.equal(guardian.calls[0][1].collection, MEMORY_COLLECTION);
+
+  const savedData = guardian.calls[0][1].data;
+  assert.deepEqual(Object.keys(savedData).sort(), ["conteudo", "contexto", "empresa_id", "titulo", "tipo"].sort());
+  assert.equal(savedData.conteudo.original, "usa dark mode");
 });
 
 test("replacement policy: a new high-signal memory with the same chave replaces (marks substituida) the old one", async () => {
-  const guardian = stubGuardian({ searchResult: [{ id: "old-1", chave: "tema-x", estado: "ativa" }] });
+  const guardian = stubGuardian({ searchResult: [{ id: "old-1", conteudo: { chave: "tema-x", estado: "ativa" } }] });
   const pipeline = createMemoryPipeline(guardian);
 
   const result = await pipeline.write({ tipo: "preferencia", conteudo: "prefere dark mode agora", chave: "tema-x", signals: highSignals }, "forge");
@@ -81,7 +88,7 @@ test("replacement policy: a new high-signal memory with the same chave replaces 
   const updateCall = guardian.calls.find(([op]) => op === "update");
   assert.ok(updateCall);
   assert.equal(updateCall[1].id, "old-1");
-  assert.equal(updateCall[1].data.estado, "substituida");
+  assert.equal(updateCall[1].data.conteudo.estado, "substituida");
 });
 
 test("does not replace anything when no existing active memory shares the chave", async () => {
