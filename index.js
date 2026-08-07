@@ -18,7 +18,13 @@ const app = express();
 // ==========================
 
 app.use(cors());
-app.use(express.json());
+// Default Express body limit is 100kb — base64 already inflates a binary
+// file by ~33%, so any real image/certificate upload (Convergia visual
+// templates included) blows past that and gets rejected with 413 before
+// ever reaching the Guardian. 20mb matches `MAX_SYNC_FILE_SIZE_BYTES`
+// already used in luna-core (Convergia, large-file routing) — same order
+// of magnitude already adopted in the project, not a new number.
+app.use(express.json({ limit: "20mb" }));
 
 process.on("uncaughtException", console.error);
 process.on("unhandledRejection", console.error);
