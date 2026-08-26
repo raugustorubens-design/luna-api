@@ -74,6 +74,41 @@ export function createSupabaseAdapter(client) {
       if (error) throw new Error(error.message ?? "Guardian count failed");
       return count ?? 0;
     },
+
+    /**
+     * GENESIS pacote 2026-08-25-foto-storage-retencao-e-memoria-obrigatoria.md
+     * (Peça 1): persistência de arquivo em Supabase Storage, ao lado (não em
+     * substituição) do contrato de linha relacional acima — mesmo princípio
+     * de "toda persistência passa pelo Guardian", estendido para objeto
+     * binário. `content` chega e sai sempre como base64, mesmo padrão de
+     * `*_data_base64` já usado nas coleções relacionais.
+     * @param {import('../contracts.js').SaveFileInput} input
+     */
+    async saveFile({ bucket, path, content, contentType }) {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .upload(path, Buffer.from(content, "base64"), { contentType, upsert: true });
+      if (error) throw new Error(error.message ?? "Guardian saveFile failed");
+      return { bucket, path };
+    },
+
+    /** @param {import('../contracts.js').GetFileInput} input */
+    async getFile({ bucket, path }) {
+      const { data, error } = await supabase.storage.from(bucket).download(path);
+      if (error) {
+        if (String(error.message ?? "").toLowerCase().includes("not found")) return null;
+        throw new Error(error.message ?? "Guardian getFile failed");
+      }
+      const buffer = Buffer.from(await data.arrayBuffer());
+      return { bucket, path, content: buffer.toString("base64"), contentType: data.type };
+    },
+
+    /** @param {import('../contracts.js').DeleteFileInput} input */
+    async deleteFile({ bucket, path }) {
+      const { error } = await supabase.storage.from(bucket).remove([path]);
+      if (error) throw new Error(error.message ?? "Guardian deleteFile failed");
+      return true;
+    },
   };
 }
 

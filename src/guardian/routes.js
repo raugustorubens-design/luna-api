@@ -71,6 +71,34 @@ export function createGuardianRouter(guardian = createGuardian()) {
     }
   });
 
+  router.post("/guardian/save-file", async (req, res) => {
+    try {
+      const record = await guardian.saveFile(req.body, origin(req));
+      res.status(201).json(record);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Guardian saveFile failed" });
+    }
+  });
+
+  router.get("/guardian/get-file", async (req, res) => {
+    try {
+      const record = await guardian.getFile({ bucket: req.query.bucket, path: req.query.path }, origin(req));
+      if (!record) return res.status(404).json({ error: "File not found" });
+      res.json(record);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Guardian getFile failed" });
+    }
+  });
+
+  router.post("/guardian/delete-file", async (req, res) => {
+    try {
+      await guardian.deleteFile(req.body, origin(req));
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Guardian deleteFile failed" });
+    }
+  });
+
   router.get("/guardian/audit", (req, res) => {
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     res.json({ entries: guardian.recentAudit(limit) });

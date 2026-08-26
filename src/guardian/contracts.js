@@ -43,11 +43,31 @@
  *
  * @typedef {Object} AuditEntry
  * @property {string} origin - quem chamou (ex.: "memory-engine", "guardian-http")
- * @property {"save"|"update"|"delete"|"get"|"search"|"count"} operation
+ * @property {"save"|"update"|"delete"|"get"|"search"|"count"|"saveFile"|"getFile"|"deleteFile"} operation
  * @property {string} at - ISO timestamp
- * @property {string} destination - coleção/tabela afetada
+ * @property {string} destination - coleção/tabela (ou bucket, para as operações de arquivo) afetada
  * @property {boolean} success
  * @property {string} [error]
+ *
+ * @typedef {Object} SaveFileInput
+ * @property {string} bucket
+ * @property {string} path
+ * @property {string} content - base64, mesmo padrão de `*_data_base64` nas coleções relacionais
+ * @property {string} [contentType]
+ *
+ * @typedef {Object} GetFileInput
+ * @property {string} bucket
+ * @property {string} path
+ *
+ * @typedef {Object} GetFileOutput
+ * @property {string} bucket
+ * @property {string} path
+ * @property {string} content - base64
+ * @property {string} contentType
+ *
+ * @typedef {Object} DeleteFileInput
+ * @property {string} bucket
+ * @property {string} path
  *
  * @typedef {Object} StorageContract
  * @property {(input: SaveInput, origin: string) => Promise<StorageRecord>} save
@@ -56,6 +76,9 @@
  * @property {(input: GetInput, origin: string) => Promise<StorageRecord | null>} get
  * @property {(input: SearchInput, origin: string) => Promise<StorageRecord[]>} search
  * @property {(input: CountInput, origin: string) => Promise<number>} count - ADR-012: contagem eficiente (SELECT count(*), não fetch-all), extensão pontual para /stats de chat em luna-core
+ * @property {(input: SaveFileInput, origin: string) => Promise<{bucket: string, path: string}>} saveFile - GENESIS pacote 2026-08-25-foto-storage-retencao-e-memoria-obrigatoria.md (Peça 1): objeto binário em Supabase Storage
+ * @property {(input: GetFileInput, origin: string) => Promise<GetFileOutput | null>} getFile
+ * @property {(input: DeleteFileInput, origin: string) => Promise<boolean>} deleteFile
  */
 
 // Este arquivo existe só para documentar o contrato via JSDoc (o repositório

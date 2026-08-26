@@ -23,6 +23,30 @@ function fakeSupabaseClient(overrides = {}) {
 
   return {
     calls,
+    storage: {
+      from(bucket) {
+        calls.push(["storage.from", bucket]);
+        return {
+          upload(path, buffer, options) {
+            calls.push(["upload", path, options]);
+            return Promise.resolve(overrides.uploadResult ?? { data: { path }, error: null });
+          },
+          download(path) {
+            calls.push(["download", path]);
+            return Promise.resolve(
+              overrides.downloadResult ?? {
+                data: { type: "image/jpeg", arrayBuffer: () => Promise.resolve(new TextEncoder().encode("abc").buffer) },
+                error: null,
+              },
+            );
+          },
+          remove(paths) {
+            calls.push(["remove", paths]);
+            return Promise.resolve(overrides.removeResult ?? { data: paths, error: null });
+          },
+        };
+      },
+    },
     from(collection) {
       calls.push(["from", collection]);
       return {
@@ -122,4 +146,50 @@ test("supabase adapter count throws on error instead of swallowing it", async ()
   const adapter = createSupabaseAdapter(client);
 
   await assert.rejects(() => adapter.count({ collection: "messages" }), /count failed/);
+});
+
+test("supabase adapter saveFile uploads base64 content to the given bucket/path", async () => {
+  const client = fakeSupabaseClient();
+  const adapter = createSupabaseAdapter(client);
+
+  const result = await adapter.saveFile({
+    bucket: "ronda-fotos",
+    path: "rfoto_1/campo.jpg",
+    content: Buffer.from("hello").toString("base64"),
+    contentType: "image/jpeg",
+  });
+
+  assert.deepEqual(result, { bucket: "ronda-fotos", path: "rfoto_1/campo.jpg" });
+  assert.deepEqual(client.calls[0], ["storage.from", "ronda-fotos"]);
+  assert.equal(client.calls[1][0], "upload");
+  assert.equal(client.calls[1][1], "rfoto_1/campo.jpg");
+});
+
+test("supabase adapter getFile downloads and returns base64 content", async () => {
+  const client = fakeSupabaseClient();
+  const adapter = createSupabaseAdapter(client);
+
+  const result = await adapter.getFile({ bucket: "ronda-fotos", path: "rfoto_1/campo.jpg" });
+
+  assert.equal(result.contentType, "image/jpeg");
+  assert.equal(Buffer.from(result.content, "base64").toString(), "abc");
+});
+
+test("supabase adapter getFile returns null when the object is not found", async () => {
+  const client = fakeSupabaseClient({ downloadResult: { data: null, error: { message: "Object not found" } } });
+  const adapter = createSupabaseAdapter(client);
+
+  const result = await adapter.getFile({ bucket: "ronda-fotos", path: "missing.jpg" });
+
+  assert.equal(result, null);
+});
+
+test("supabase adapter deleteFile removes the object and returns true", async () => {
+  const client = fakeSupabaseClient();
+  const adapter = createSupabaseAdapter(client);
+
+  const result = await adapter.deleteFile({ bucket: "ronda-fotos", path: "rfoto_1/campo.jpg" });
+
+  assert.equal(result, true);
+  assert.deepEqual(client.calls[client.calls.length - 1], ["remove", ["rfoto_1/campo.jpg"]]);
 });
