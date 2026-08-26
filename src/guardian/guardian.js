@@ -43,6 +43,15 @@ export function createGuardian(adapter = createSupabaseAdapter(), auditor = new 
     /** @param {import('./contracts.js').CountInput} input @param {string} origin */
     count: (input, origin) => run("count", input.collection, origin, () => adapter.count(input)),
 
+    /** @param {import('./contracts.js').SaveFileInput} input @param {string} origin */
+    saveFile: (input, origin) => run("saveFile", input.bucket, origin, () => adapter.saveFile(input)),
+
+    /** @param {import('./contracts.js').GetFileInput} input @param {string} origin */
+    getFile: (input, origin) => run("getFile", input.bucket, origin, () => adapter.getFile(input)),
+
+    /** @param {import('./contracts.js').DeleteFileInput} input @param {string} origin */
+    deleteFile: (input, origin) => run("deleteFile", input.bucket, origin, () => adapter.deleteFile(input)),
+
     /** Auditoria recente — só leitura, para diagnóstico. */
     recentAudit: (limit) => auditor.sink.recent(limit),
   };
