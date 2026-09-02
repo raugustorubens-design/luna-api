@@ -6,6 +6,7 @@ import cors from "cors";
 import { createGuardian } from "./src/guardian/guardian.js";
 import { createGuardianRouter } from "./src/guardian/routes.js";
 import { createMemoryRouter } from "./src/guardian/hipocampo-temp/routes.js";
+import { requireGuardianToken } from "./src/guardian/auth.js";
 
 // ==========================
 // APP
@@ -44,7 +45,16 @@ app.get("/", (req, res) => {
 // de armazenamento (save/update/delete/get/search + auditoria) e o pipeline
 // de memória (EXTRACT→FILTER→CLASSIFY→VALIDATE→PERSIST + Memory Index) —
 // para que ambos falem com o mesmo adapter e a mesma trilha de auditoria.
+//
+// Achado de segurança 2026-09-02 (genesis_pacote_fila id 83): toda rota
+// /guardian/* (contrato genérico e pipeline de memória) exige bearer token
+// dedicado -- GUARDIAN_SHARED_SECRET -- antes desta etapa, qualquer um na
+// internet podia ler/escrever/apagar qualquer coleção. Fail-closed: 503 se
+// o segredo não estiver configurado no servidor, 401 se o token estiver
+// ausente/errado. Montado antes dos dois routers para interceptar as duas
+// famílias de rota (ambas começam em /guardian/); GET / continua público.
 const guardian = createGuardian();
+app.use("/guardian", requireGuardianToken());
 app.use(createGuardianRouter(guardian));
 app.use(createMemoryRouter(guardian));
 
