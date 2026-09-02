@@ -22,6 +22,11 @@ antes, lado a lado com o Guardian novo. Nada foi removido.
 - `audit.js` — auditoria injetável (`InMemoryAuditSink` + `GuardianAuditor`),
   mesmo padrão já usado pelo Gateway no monorepo `luna`
   (`src/gateway/audit/audit.ts`).
+- `auth.js` — guarda de autenticação por bearer token (`GUARDIAN_SHARED_SECRET`),
+  montada em `index.js` na frente de toda rota `/guardian/*`. Achado de
+  segurança 2026-09-02 (genesis_pacote_fila id 83): antes desta etapa, a API
+  de escrita do Guardian estava em produção sem nenhuma verificação de
+  identidade. Fail-closed por desenho — ver seção "Variáveis de ambiente".
 - `adapters/supabase-adapter.js` — único módulo autorizado a importar
   `@supabase/supabase-js`. Guardian nunca conhece tabelas/drivers
   diretamente — só fala com este adapter através do contrato genérico.
@@ -91,12 +96,10 @@ extração do Hipocampo/Memory Index para um serviço próprio.
 | Variável | Uso |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_KEY` | Adapter do Guardian — usado tanto pelo contrato genérico (`/guardian/save` etc.) quanto pelo pipeline de memória (`/guardian/memory`), mesma instância |
+| `GUARDIAN_SHARED_SECRET` | Bearer token exigido em toda rota `/guardian/*` (achado de segurança 2026-09-02, genesis_pacote_fila id 83). Nunca a service key do Supabase — segredo dedicado, próprio deste uso. Fail-closed: sem esta variável configurada, `src/guardian/auth.js` recusa (503) toda requisição às rotas protegidas; com ela configurada, exige `Authorization: Bearer <segredo>` em cada requisição e recusa (401) quando ausente/incorreto |
 | `DATABASE_URL` | Só das rotas legadas (`/chat`, tabela `memoria_eventos`) — não usado pelo Guardian |
 | `GITHUB_TOKEN`, `REPO_OWNER`, `REPO_NAME` | Só da rota legada `/api/github/file` |
 | `PORT` | Porta do servidor (default 3000) |
-
-Nenhuma variável nova foi introduzida por esta etapa — o pipeline de memória
-reaproveita `SUPABASE_URL`/`SUPABASE_KEY` (mesma instância do Guardian).
 
 ## Rodando localmente
 
