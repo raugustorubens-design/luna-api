@@ -16,6 +16,7 @@
  * @typedef {Object} SaveInput
  * @property {string} collection
  * @property {Record<string, unknown>} data
+ * @property {string} [onConflict] - coluna com constraint de unicidade usada para upsert idempotente (ON CONFLICT ... DO NOTHING); omitido = insert simples, comportamento padrão inalterado
  *
  * @typedef {Object} UpdateInput
  * @property {string} collection

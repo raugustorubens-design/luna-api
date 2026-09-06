@@ -54,6 +54,10 @@ function fakeSupabaseClient(overrides = {}) {
           calls.push(["insert", rows]);
           return { select: () => Promise.resolve(overrides.insertResult ?? { data: rows.map((r) => ({ id: "gen-1", ...r })), error: null }) };
         },
+        upsert(rows, options) {
+          calls.push(["upsert", rows, options]);
+          return { select: () => Promise.resolve(overrides.upsertResult ?? { data: rows.map((r) => ({ id: "gen-1", ...r })), error: null }) };
+        },
         update(data) {
           calls.push(["update", data]);
           return { eq: (col, val) => ({ select: () => Promise.resolve(overrides.updateResult ?? { data: [{ id: val, ...data }], error: null }) }) };
@@ -89,6 +93,33 @@ test("supabase adapter save throws on error instead of swallowing it", async () 
   const adapter = createSupabaseAdapter(client);
 
   await assert.rejects(() => adapter.save({ collection: "memoria_luna", data: {} }), /insert failed/);
+});
+
+test("supabase adapter save upserts on the given column when onConflict is provided (idempotência, pacote 110)", async () => {
+  const client = fakeSupabaseClient();
+  const adapter = createSupabaseAdapter(client);
+
+  const record = await adapter.save({ collection: "convergia_rondas", data: { local_id: "local-1" }, onConflict: "local_id" });
+
+  assert.equal(record.id, "gen-1");
+  assert.deepEqual(client.calls[0], ["from", "convergia_rondas"]);
+  assert.deepEqual(client.calls[1], ["upsert", [{ local_id: "local-1" }], { onConflict: "local_id", ignoreDuplicates: true }]);
+});
+
+test("supabase adapter save returns null when the upsert hits an existing conflicting row (ON CONFLICT DO NOTHING)", async () => {
+  const client = fakeSupabaseClient({ upsertResult: { data: [], error: null } });
+  const adapter = createSupabaseAdapter(client);
+
+  const record = await adapter.save({ collection: "convergia_rondas", data: { local_id: "local-1" }, onConflict: "local_id" });
+
+  assert.equal(record, null, "linha já existe com o mesmo local_id — nenhuma nova linha, nenhuma sobrescrita");
+});
+
+test("supabase adapter save throws on error during upsert instead of swallowing it", async () => {
+  const client = fakeSupabaseClient({ upsertResult: { data: null, error: { message: "upsert failed" } } });
+  const adapter = createSupabaseAdapter(client);
+
+  await assert.rejects(() => adapter.save({ collection: "convergia_rondas", data: {}, onConflict: "local_id" }), /upsert failed/);
 });
 
 test("supabase adapter get filters by id and returns the first row", async () => {

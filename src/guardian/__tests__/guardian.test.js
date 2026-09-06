@@ -58,6 +58,15 @@ test("guardian.save delegates to the adapter and records a success audit entry",
   assert.match(sink.entries[0].at, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test("guardian.save passes onConflict through untouched — Guardian never inspects/hardcodes column names", async () => {
+  const adapter = stubAdapter();
+  const guardian = createGuardian(adapter, new GuardianAuditor(new InMemoryAuditSink()));
+
+  await guardian.save({ collection: "convergia_rondas", data: { local_id: "x" }, onConflict: "local_id" }, "convergia-ronda-routes");
+
+  assert.deepEqual(adapter.calls[0], ["save", { collection: "convergia_rondas", data: { local_id: "x" }, onConflict: "local_id" }]);
+});
+
 test("guardian.get/search/update/delete/count all delegate and audit under the right operation name", async () => {
   const adapter = stubAdapter({ searchResult: [{ id: "2" }], countResult: 3 });
   const sink = new InMemoryAuditSink();

@@ -17,9 +17,23 @@ export function createSupabaseAdapter(client) {
     createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_KEY"));
 
   return {
-    /** @param {import('../contracts.js').SaveInput} input */
-    async save({ collection, data }) {
-      const { data: rows, error } = await supabase.from(collection).insert([data]).select();
+    /**
+     * `onConflict`, quando informado (ex.: "local_id"), troca o insert puro
+     * por um upsert idempotente (`ON CONFLICT ... DO NOTHING`): uma segunda
+     * chamada com o mesmo valor naquela coluna não cria uma segunda linha
+     * nem sobrescreve a existente, e `.select()` devolve `[]` para a linha
+     * ignorada — por isso o retorno vira `null` nesse caso, distinto do
+     * insert simples (que sempre devolve a linha inserida ou lança). Quem
+     * chama (`guardian.js`/consumidores do `GuardianContract`) decide o que
+     * fazer com esse `null` — o Guardian continua sem conhecer o
+     * significado de nenhuma coluna específica.
+     * @param {import('../contracts.js').SaveInput} input
+     */
+    async save({ collection, data, onConflict }) {
+      const query = supabase.from(collection);
+      const { data: rows, error } = onConflict
+        ? await query.upsert([data], { onConflict, ignoreDuplicates: true }).select()
+        : await query.insert([data]).select();
       if (error) throw new Error(error.message ?? "Guardian save failed");
       return rows?.[0] ?? null;
     },
